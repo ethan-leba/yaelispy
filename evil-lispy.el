@@ -29,8 +29,22 @@
 (defmacro evil-lispy--bind (&rest code)
   "Helper to make an bindable command"
   `(lambda ()
+    (interactive)
+    ,@code))
+
+(defun evil-lispy--insert-after (fun)
+  "Helper to make an bindable command"
+  (lambda ()
+    (interactive)
+    (funcall fun)
+    (evil-insert-state)))
+
+(defun evil-lispy--jump-back (fun)
+  "Helper to make an bindable command"
+  `(lambda ()
      (interactive)
-     ,@code))
+     (funcall fun)
+     (lispy-backward 1)))
 
 (defun evil-lispy-alter-sexp-left ()
   "Move bound of sexp left"
@@ -46,6 +60,19 @@
       (lispy-barf 1)
     (lispy-slurp 1)))
 
+(defun evil-lispy-insert ()
+  "Move bound of sexp left"
+  (interactive)
+  (when (looking-at lispy-right)
+    (backward-char))
+  (evil-insert 0))
+
+(defun evil-lispy-append ()
+  "Move bound of sexp left"
+  (interactive)
+  (when (looking-at lispy-right)
+    (backward-char))
+  (evil-append 0))
 
 ;; ——— Evil standard keymap overrides —————————————————————————————————————————
 
@@ -61,38 +88,10 @@
      (evil-lispy-state)
      (evil-backward-char 1 nil t)
      (lispy-forward 1)))
-
-  ;; Brackets
-  (evil-define-key 'insert map (kbd "(") 'lispy-parens)
-  (evil-define-key 'insert map (kbd ")") 'lispy-out-forward-nostring)
-  (evil-define-key 'insert map (kbd "{") 'lispy-braces)
-  (evil-define-key 'insert map (kbd "}") 'lispy-out-forward-nostring)
-  (evil-define-key 'insert map (kbd "[") 'lispy-brackets)
-  (evil-define-key 'insert map (kbd "]") 'lispy-out-forward-nostring)
-
-  ;; Killing
-  (evil-define-key 'normal map (kbd "x") 'lispy-delete)
-  (evil-define-key 'insert map (kbd "X") 'lispy-delete-backward)
-  (evil-define-key 'insert map (kbd "DEL") 'lispy-delete-backward)
-
-  ;(evil-define-key 'normal map (kbd "dd") 'lispy-kill)
-  (evil-define-key 'normal map (kbd "D") 'lispy-kill)
-  (evil-define-key 'normal map (kbd "C") (evil-lispy--bind
-                                          (lispy-kill) (evil-insert 0)))
-  (evil-define-key 'normal map (kbd "S") (evil-lispy--bind
-                                          (lispy-kill-at-point) (evil-insert 0)))
-
-  (evil-define-key 'normal map (kbd "p") 'lispy-yank)
-
-  ;; Misc
-  (evil-define-key 'normal map (kbd "gv") (evil-lispy--bind (evil-lispy-state) (lispy-mark-symbol)))
-  (evil-define-key 'normal map (kbd "gV") (evil-lispy--bind (evil-lispy-state) (lispy-mark)))
-
-  (evil-define-key 'normal map (kbd "gJ") 'lispy-split)
-  (evil-define-key 'normal map (kbd "C-e") 'lispy-move-end-of-line)
-
-  (evil-define-key 'normal map (kbd "C-1") 'lispy-describe-inline)
-  (evil-define-key 'normal map (kbd "C-2") 'lispy-arglist-inline)
+  (evil-define-key 'insert map [escape]
+    (evil-lispy--bind
+     (evil-lispy-state)
+     (lispy-backward 1)))
   map)
 
 
@@ -107,34 +106,17 @@
 
   (define-key map [escape] (kbd "C-g"))
 
-  (define-key map "w" (evil-lispy--bind
-                       (evil-normal-state) (evil-forward-word)))
-  (define-key map "W" (evil-lispy--bind
-                       (evil-normal-state) (evil-forward-WORD-begin)))
-  (define-key map "e" (evil-lispy--bind
-                       (evil-normal-state) (evil-forward-word-end)))
-  (define-key map "E" (evil-lispy--bind
-                       (evil-normal-state) (evil-forward-WORD-end)))
-  (define-key map "b" (evil-lispy--bind
-                       (evil-normal-state) (evil-backward-word-begin)))
-  (define-key map "B" (evil-lispy--bind
-                       (evil-normal-state) (evil-backward-WORD-begin)))
-  (define-key map "ge" (evil-lispy--bind
-                       (evil-normal-state) (evil-backward-word-end)))
-  (define-key map "gE" (evil-lispy--bind
-                       (evil-normal-state) (evil-backward-WORD-end)))
+  (define-key map "i" 'evil-lispy-insert)
 
-  (define-key map "i" 'evil-insert)
-  (define-key map "I" 'evil-insert-line)
-  (define-key map "a" 'evil-append)
-  (define-key map "A" 'evil-append-line)
-  (define-key map (kbd "SPC") (evil-lispy--bind
-                               (lispy-space) (evil-insert-state)))
+  (define-key map "a" 'evil-lispy-append)
+  (define-key map "A" 'lispy-beginning-of-defun)
+  ;; (define-key map (kbd "SPC") (evil-lispy--bind
+  ;;                              (lispy-space) (evil-insert-state)))
   (define-key map (kbd "RET") (evil-lispy--bind
                                (lispy-newline-and-indent) (evil-insert-state)))
 
   ;; Navigation
-  (define-key map (kbd "(") 'lispy-out-backward)
+  (define-key map (kbd "(") #'lispy-parens)
   (define-key map (kbd ")") 'lispy-out-forward)
   (define-key map (kbd "C-o") 'evil-jump-backward) ; need to go to normal mode if out of special
   (define-key map (kbd "C-i") 'evil-jump-forward) ; need to go to normal mode if out of special
@@ -169,8 +151,9 @@
   (define-key map "t" 'lispy-teleport)
 
   ;; Kill related
-  (define-key map (kbd "DEL") 'lispy-delete-backward)
-  (define-key map "D" 'lispy-kill)
+  ;; (define-key map (kbd "DEL")
+  ;;   (evil-lispy--jump-back (lispy-delete-backward 0)))
+  (define-key map "d" (evil-lispy--jump-back (lispy-kill-at-point)))
   (define-key map "S" (evil-lispy--bind
                        (lispy-kill-at-point) (evil-insert 0)))
   (define-key map "p" 'lispy-yank)
@@ -191,7 +174,7 @@
   (define-key map "e" 'lispy-eval)
   (define-key map "E" 'lispy-eval-and-insert)
   (define-key map "K" 'lispy-describe)
-  (define-key map "A" 'lispy-arglist)
+
   (define-key map "gq" 'lispy-normalize)
   (define-key map "=" 'lispy-tab)
   (define-key map (kbd "TAB") 'lispy-shifttab)
