@@ -1,103 +1,282 @@
-# Evil Lispy
+<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
+**Table of Contents**
 
-Wrap [Lispy](https://github.com/abo-abo/lispy) in an
-[Evil](https://gitorious.org/evil/pages/Home) sexp editing state.  I tried to
-keep commands mappings close to similar vim mneumonics. Not every command has
-been mapped yet. The motivation for this is essentially to make Lispy active
-explicitly rather than implicitly.
+- [1. Vimify Lispy as much as possible.](#1-vimify-lispy-as-much-as-possible)
+- [2. Make Lispy the primary state.](#2-make-lispy-the-primary-state)
+- [3. Make insertion vs. structure editing explicit.](#3-make-insertion-vs-structure-editing-explicit)
+- [4. No knowledge of vanilla Lispy required.](#4-no-knowledge-of-vanilla-lispy-required)
+- [A quick recap on structural editing for the uninitiated](#a-quick-recap-on-structural-editing-for-the-uninitiated)
+- [Keybindings](#keybindings)
+    - [Reversible commands](#reversible-commands)
+    - [Keys that modify whitespace](#keys-that-modify-whitespace)
+    - [Command chaining](#command-chaining)
+    - [Navigating with `avy`-related commands](#navigating-with-avy-related-commands)
+- [Operating on regions](#operating-on-regions)
+    - [Ways to activate region](#ways-to-activate-region)
+    - [Move region around](#move-region-around)
+    - [Switch to the other side of the region](#switch-to-the-other-side-of-the-region)
+    - [Grow/shrink region](#growshrink-region)
+    - [Commands that operate on region](#commands-that-operate-on-region)
+        - [YAE-Lispy specific commands](#yae-lispy-specific-commands)
+            - [`yae-lispy-insert`](#yae-lispy-insert)
+            - [Post command behavior](#post-command-behavior)
 
-# Command Reference
-## Normal and Sexp state
+<!-- markdown-toc end -->
 
- - Enter the sexp editing state with either `(` or `)`.
- - Exit it with ESC, or word motions (w/W b/B e/E) to return to normal state.
- - Use i, a, SPC, or RET to enter insert state.
+**YAE-Lispy** is _Yet-Another-Evil_ [Lispy](https://github.com/abo-abo/lispy)
+variant that aims to make Lispy familiar and intuitive to the Vim user while
+retaining the full power of Lispy's structural editing capabilities.
 
- - x, X kill full sexps on the boundary
- - D, C preserve paren balance
- - S kills the current sexp and enters insert state
+YAE-Lispy differs from it's peers (see [lispyville](https://github.com/noctuid/lispyville) and [sp3ctum/evil-lispy](https://github.com/sp3ctum/evil-lispy)) in the following goals:
 
- - gv mark a symbol and enter sexp state
- - gV mark an sexp and enter sexp state
+#### 1. Vimify Lispy as much as possible.
 
- - gJ split an sexp
+YAE-Lispy leverages the Vimmer's muscle memory and minimizes the need to
+learn/use Emacs binding with lispy, and thus provides **a complete overhaul of
+Lispy's keybindings**. The keybindings are closely aligned to Vim's Visual
+state, while differing where sensible. In addition to rebinding keys to more
+familiar positions, YAE-Lispy includes some primitive operators to the
+keymapping that vanilla Lispy intended to be accessed via. the Emacs bindings.
+
+#### 2. Make Lispy the primary state.
+
+In contrast to other evil-flavored lispy variants, which provide support for a
+hybrid Lispy/Normal state approach, dipping into the featureset of Lispy while
+remaining in the comfort of Normal state. YAE-Lispy opts for a different
+approach, **intending for users to primarily use Lispy state** while allowing
+for transient forays into Normal state. 
+
+The key <kbd>n</kbd> will drop the user into Normal state, and will be sent back
+to Lispy state under the following conditions:
+
+1. An edit is made to the buffer in normal mode.
+2. Insert mode is exited.
+
+The main intended usecase is to modify single symbols. The YAE-Lisper can
+perform a quick operation on a symbol, and get dropped right back into the Lispy
+state on completion.
+
+#### 3. Make insertion vs. structure editing explicit.
+
+YAE-Lispy uses the Vimmer's familiar Insert state instead of implicitly
+dispatching based on point location, as vanilla Lispy and evil-lispy does. One
+large benefit to this is that the <kbd>SPC</kbd> key is now freed to operate as
+a leader key. _(\*cough\* doom/spacemacs \*cough\*)_ Insert mode is entered with
+<kbd>i</kbd> (unsurprisingly).
+
+#### 4. No knowledge of vanilla Lispy required.
+
+Lispy is an incredibly powerful tool, but along with it's power comes great
+complexity -- the following sections serve to give a short and sweet overview of
+Lispy's capabilities from the context of YAE-Lispy's modifications that users
+with no experience with Lispy/Paredit/Structural Editing can hit the ground
+running with.
 
 
-## Navigation
-    |-----+--------------------------+------------+-------------------|
-    | key | command                  | key        | command           |
-    |-----+--------------------------+------------+-------------------|
-    | (   | `lispy-out-backward`     | )          | `lispy-out-forward`
-    | a   | `lispy-backward`         | l          | `lispy-forward`   |
-    | j   | `lispy-up`               | k          | `lispy-down`      |
-    | f   | `lispy-flow`             |            |                   |
-    | o   | `lispy-differnt`         | o          | reverses itself   |
-    | gd  | `lispy-follow`           |            |                   |
-    | G   | `lispy-goto`             |            |                   |
-    | q   | `lispy-ace-paren`        |            |                   |
-    | Q   | `lispy-ace-char`         |            |                   |
-    |-----+--------------------------+------------+-------------------|
+## A quick recap on structural editing for the uninitiated
 
-## Transformations
+While most text editors operate on a character level, in Lispy state we operate
+via the tree structure of the program itself, which conveniently maps to the
+sexp structure.
 
-    |-----+--------------------------+------------+-------------------|
-    | key | command                  | key        | command           |
-    |-----+--------------------------+------------+-------------------|
-    | C-k | `lispy-move-up`          | C-j        | `lispy-move-down` |
-    | >   | `alter-sexp-right`       | <          | `alter-sexp-left` |
-    | c   | `lispy-clone`            | DEL        |                   |
-    | C   | `lispy-convolute`        | C          | Reverses itself   |
-    | r   | `lispy-raise`            | u          | `lispy-undo`      |
-    | R   | `lispy-raise-some`       | u          | `lispy-undo`      |
-    | /   | `lispy-splice`           | u          | `lispy-undo`      |
-    | gJ  | `lispy-split`            | J          | `lispy-join`      |
-    | O   | `lispy-oneline`          | M          | `lispy-multiline` |
-    | ;   | `lispy-comment`          | C-u ;      | `lispy-comment`   |
-    | t   | `lispy-teleport`         |            |                   |
-    |-----+--------------------------+------------+-------------------|
+For example, consider the venerable `append` function.
 
-    < and > change the bounds of sexps contextually, depeding on which
-    side they point is on.
+```
+(defun append (x y)
+  (cond
+   ((not x) y)
+   (t (cons (car x) (append (cdr x) y)))))
+```
 
-## Kill related
+Here is the same function represented as a tree, where `s` marks a node on the
+tree.
 
-    |-------+------------------------------------|
-    | key   | command                            |
-    |-------+------------------------------------|
-    | DEL   | `lispy-delete-backward`            |
-    | D     | `lispy-kill`                       |
-    | C     | `lispy-kill` and enter insert      |
-    | S     | `lispy-kill-at-point`              |
-    | p     | `lispy-yank`                       |
-    | y     | `lispy-new-copy`                   |
-    |-------+------------------------------------|
+```text
+   ┌─────┬───s───┬────────────┐
+   │     │       │            │
+   │     │     ┌─s─┐    ┌─────s─────────────┐
+   ▼     ▼     │   │    ▼     │             │
+defun append   │   │   cond   │             │
+               │   │          │     ┌───────s────────────────┐
+               ▼   ▼          │     ▼       │                │
+               x   y          │    cons     │                │
+                          ┌───s───┐     ┌───s───┐      ┌─────s─────┐
+                          │       │     │       │      │     │     │
+                          │       ▼     ▼       ▼      ▼     │     ▼
+                          │       y    car      x    append  │     y
+                       ┌──s──┐                           ┌───s───┐
+                       │     │                           │       │
+                       │     │                           │       │
+                       ▼     ▼                           ▼       ▼
+                      not    x                          cdr      x
+```
 
-## Marking
+We can see that leaves correspond to symbols, while the nodes correspond to lists.
 
-    |-------+------------------------------------|
-    | key   | command                            |
-    |-------+------------------------------------|
-    | v     | `lispy-mark-symbol`                |
-    | V     | `lispy-mark-list`                  |
-    | s     | `lispy-ace-symbol`                 |
-    | gs    | `lispy-ace-symbol-replace`         |
-    |-------+------------------------------------|
+### Terminology
 
-## Misc
+- **Parent**: The node above the current.
+- **Sibling**:
 
-    |-------+------------------------------------|
-    | key   | command                            |
-    |-------+------------------------------------|
-    | C-1   | `lispy-describe-inline             |
-    | C-2   | `lispy-arglist-inline              |
-    | u     | `lispy-undo`                       |
-    | e     | `lispy-eval`                       |
-    | E     | `lispy-eval-and-insert`            |
-    | K     | `lispy-describe`                   |
-    | A     | `lispy-arglist`                    |
-    | gq    | `lispy-normalize`                  |
-    | z     | `lispy-view`                       |
-    | =     | `lispy-tab`                        |
-    | TAB   | `lispy-shifttab`                   |
-    |-------+------------------------------------|
+## Keybindings
 
+First off, here are the keybindings in YAE-Lispy that map very closely to Vim's bindings.
+
+| key                                                                 | description                                                 | demonstration                                                                     |
+| ------------------                                                  | -                                                           | -----                                                                             |
+| [<kbd>h</kbd>](http://abo-abo.github.io/lispy/#lispy-backward)      | move to the previous list.                                  | ![](file:///Users/ethanleba/Documents/OSS/nyobe-evil-lispy/assets/lispy-flow.svg) |
+| [<kbd>k</kbd>](http://abo-abo.github.io/lispy/#lispy-up)            | move to the previous list inside the current, if it exists. | ![](file:///Users/ethanleba/Documents/OSS/nyobe-evil-lispy/assets/lispy-flow.svg) |
+| [<kbd>j</kbd>](http://abo-abo.github.io/lispy/#lispy-down)          | move to the next list at the current level.                 | ![](file:///Users/ethanleba/Documents/OSS/nyobe-evil-lispy/assets/lispy-down.svg) |
+| [<kbd>f</kbd>](http://abo-abo.github.io/lispy/#lispy-flow)          | move to the next list.                                      | ![](file:///Users/ethanleba/Downloads/fooble.svg)                                 |
+| [<kbd>d</kbd>](http://abo-abo.github.io/lispy/#lispy-kill-at-point) | delete the current list (and then jump to the next list).   |                                                                                   |
+| [<kbd>c</kbd>](http://abo-abo.github.io/lispy/#yae-lispy-change)    | delete the current list (and then enter insert mode).       |                                                                                   |
+| [<kbd>p</kbd>](http://abo-abo.github.io/lispy/#lispy-paste)         | paste before the current list.                              |                                                                                   |
+| [<kbd>y</kbd>](http://abo-abo.github.io/lispy/#lispy-new-copy)      | yank the list at point.                                     |                                                                                   |
+| [<kbd>u</kbd>](http://abo-abo.github.io/lispy/#lispy-undo)          | undo.                                                       |                                                                                   |
+| [<kbd>i</kbd>](#yae-lispy-insert)                                   | enter insert mode.                                          |                                                                                   |
+| [<kbd>a</kbd>](#yae-lispy-append)                                   | enter insert mode.                                          |                                                                                   |
+<!-- | [<kbd>l</kbd>](http://abo-abo.github.io/lispy/#lispy-forward)       |                                                             |                                                       | -->
+
+[^1]: well, not really.
+
+FOO
+
+| key                | command                                                             |
+| ------------------ | ------------------------------------------------------------------- |
+| <kbd>h</kbd>       | [`lispy-backward`](http://abo-abo.github.io/lispy/#lispy-backward)  |
+
+### Reversible commands
+
+A lot of Lispy commands come in pairs - one reverses the other:
+
+ key            | command                       | key                              | command
+----------------|-------------------------------|----------------------------------|----------------------
+ <kbd>j</kbd>   | `lispy-down`                  | <kbd>k</kbd>                     | `lispy-up`
+ <kbd>s</kbd>   | `lispy-move-down`             | <kbd>w</kbd>                     | `lispy-move-up`
+ <kbd>></kbd>   | `lispy-slurp`                 | <kbd><</kbd>                     | `lispy-barf`
+ <kbd>c</kbd>   | `lispy-clone`                 | <kbd>C-d</kbd> or <kbd>DEL</kbd> |
+ <kbd>C</kbd>   | `lispy-convolute`             | <kbd>C</kbd>                     | reverses itself
+ <kbd>d</kbd>   | `lispy-different`             | <kbd>d</kbd>                     | reverses itself
+ <kbd>M-j</kbd> | `lispy-split`                 | <kbd>+</kbd>                     | `lispy-join`
+ <kbd>O</kbd>   | `lispy-oneline`               | <kbd>M</kbd>                     | `lispy-multiline`
+ <kbd>S</kbd>   | `lispy-stringify`             | <kbd>C-u "</kbd>                 | `lispy-quotes`
+ <kbd>;</kbd>   | `lispy-comment`               | <kbd>C-u ;</kbd>                 | `lispy-comment`
+ <kbd>xi</kbd>  | `lispy-to-ifs`                | <kbd>xc</kbd>                    | `lispy-to-cond`
+ <kbd>x></kbd>  | `lispy-toggle-thread-last`    | <kbd>x></kbd>                    | reverses itself
+
+### Keys that modify whitespace
+
+These commands handle whitespace in addition to inserting the expected
+thing.
+
+ key            | command
+----------------|---------------------------
+ <kbd>SPC</kbd> | `lispy-space`
+ <kbd>:</kbd>   | `lispy-colon`
+ <kbd>^</kbd>   | `lispy-hat`
+ <kbd>C-m</kbd> | `lispy-newline-and-indent`
+
+### Command chaining
+
+Most special commands will leave the point special after they're
+done.  This allows to chain them as well as apply them
+continuously by holding the key.  Some useful hold-able keys are
+<kbd>jkf<>cws;</kbd>.
+Not so useful, but fun is <kbd>/</kbd>: start it from `|(` position and hold
+until all your Lisp code is turned into Python :).
+
+### Navigating with `avy`-related commands
+
+ key            | command
+----------------|--------------------------
+ <kbd>q</kbd>   | `lispy-ace-paren`
+ <kbd>Q</kbd>   | `lispy-ace-char`
+ <kbd>a</kbd>   | `lispy-ace-symbol`
+ <kbd>H</kbd>   | `lispy-ace-symbol-replace`
+ <kbd>-</kbd>   | `lispy-ace-subword`
+
+<kbd>q</kbd> - `lispy-ace-paren` jumps to a "(" character within current
+top-level form (e.g. `defun`). It's much faster than typing in the
+`avy` binding + selecting "(", and there's less candidates,
+since they're limited to the current top-level form.
+
+<kbd>a</kbd> - `lispy-ace-symbol` will let you select which symbol to
+mark within current form. This can be followed up with e.g. eval,
+describe, follow, raise etc. Or you can simply <kbd>m</kbd> to
+deactivate the mark and edit from there.
+
+<kbd>-</kbd> - `lispy-ace-subword` is a niche command for a neat combo. Start with:
+
+    (buffer-substring-no-properties
+     (region-beginning)|)
+
+Type <kbd>c</kbd>, <kbd>-</kbd>, <kbd>b</kbd> and <kbd>C-d</kbd> to get:
+
+    (buffer-substring-no-properties
+     (region-beginning)
+     (region-|))
+
+Fill `end` to finish the statement.
+
+# Operating on regions
+Sometimes the expression that you want to operate on isn't bounded by parens.
+In that case you can mark it with a region and operate on that.
+
+## Ways to activate region
+While in special:
+- Mark a sexp with <kbd>m</kbd> - `lispy-mark-list`
+- Mark a symbol within sexp <kbd>a</kbd> - `lispy-ace-symbol`.
+
+While not in special:
+- <kbd>C-SPC</kbd> - `set-mark-command`
+- mark a symbol at point with <kbd>M-m</kbd> - `lispy-mark-symbol`
+- mark containing expression (list or string or comment) with <kbd>C-M-,</kbd> - `lispy-mark`
+
+## Move region around
+
+The arrow keys <kbd>j</kbd>/<kbd>k</kbd> will move the region up/down within the current
+list.  The actual code will not be changed.
+
+## Switch to the other side of the region
+
+Use <kbd>d</kbd> - `lispy-different` to switch between different sides
+of the region. The side is important since the grow/shrink operations
+apply to current side of the region.
+
+## Grow/shrink region
+
+Use a combination of:
+- <kbd>></kbd> - `lispy-slurp` - extend by one sexp from the current side. Use digit
+  argument to extend by several sexps.
+- <kbd><</kbd> - `lispy-barf` - shrink by one sexp from the current side. Use digit
+  argument to shrink by several sexps.
+
+The other two arrow keys will mark the parent list of the current region:
+
+- <kbd>h</kbd> - `lispy-left` - mark the parent list with the point on the left
+- <kbd>l</kbd> - `lispy-right` - mark the parent list with the point on the right
+
+To do the reverse of the previous operation, i.e. to mark the first
+child of marked list, use <kbd>i</kbd> - `lispy-tab`.
+
+## Commands that operate on region
+- <kbd>m</kbd> - `lispy-mark-list` - deactivate region
+- <kbd>c</kbd> - `lispy-clone` - clone region and keep it active
+- <kbd>s</kbd> - `lispy-move-down` - move region one sexp down
+- <kbd>w</kbd> - `lispy-move-up` - move region one sexp up
+- <kbd>u</kbd> - `lispy-undo` - deactivate region and undo
+- <kbd>t</kbd> - `lispy-teleport` - move region inside the sexp you select with `lispy-ace-paren`
+- <kbd>C</kbd> - `lispy-convolute` - exchange the order of application of two sexps that contain region
+- <kbd>n</kbd> - `lispy-new-copy` - copy region as kill without deactivating the mark
+- <kbd>P</kbd> - `lispy-paste` - replace region with current kill
+
+### YAE-Lispy specific commands
+
+#### `yae-lispy-insert`
+
+
+
+#### Post command behavior
+1. Jump to closest left paren
+2. Enter insert mode
+3. Enter insert mode if point is not special
