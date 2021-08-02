@@ -1,103 +1,40 @@
-# Evil Lispy
 
-Wrap [Lispy](https://github.com/abo-abo/lispy) in an
-[Evil](https://gitorious.org/evil/pages/Home) sexp editing state.  I tried to
-keep commands mappings close to similar vim mneumonics. Not every command has
-been mapped yet. The motivation for this is essentially to make Lispy active
-explicitly rather than implicitly.
+**YAE-Lispy** is _Yet-Another-Evil_ [Lispy](https://github.com/abo-abo/lispy)
+variant that aims to make Lispy familiar and intuitive to the Vim user while
+retaining the full power of Lispy's structural editing capabilities.
 
-# Command Reference
-## Normal and Sexp state
+YAE-Lispy differs from it's peers (see [lispyville](https://github.com/noctuid/lispyville) and [sp3ctum/evil-lispy](https://github.com/sp3ctum/evil-lispy)) in the following goals:
 
- - Enter the sexp editing state with either `(` or `)`.
- - Exit it with ESC, or word motions (w/W b/B e/E) to return to normal state.
- - Use i, a, SPC, or RET to enter insert state.
+#### 1. Vimify Lispy as much as possible.
 
- - x, X kill full sexps on the boundary
- - D, C preserve paren balance
- - S kills the current sexp and enters insert state
+YAE-Lispy leverages the Vimmer's muscle memory and minimizes the need to
+learn/use Emacs binding with lispy, and thus provides **a complete overhaul of
+Lispy's keybindings**. The keybindings are closely aligned to Vim's Visual
+state, while differing where sensible. In addition to rebinding keys to more
+familiar positions, YAE-Lispy includes some primitive operators to the
+keymapping that vanilla Lispy intended to be accessed via. the Emacs bindings.
 
- - gv mark a symbol and enter sexp state
- - gV mark an sexp and enter sexp state
+#### 2. Make Lispy the primary state.
 
- - gJ split an sexp
+In contrast to other evil-flavored lispy variants, which provide support for a
+hybrid Lispy/Normal state approach, dipping into the featureset of Lispy while
+remaining in the comfort of Normal state. YAE-Lispy opts for a different
+approach, **intending for users to primarily use Lispy state** while allowing
+for transient forays into Normal state. 
 
+The key <kbd>n</kbd> will drop the user into Normal state, and will be sent back
+to Lispy state under the following conditions:
 
-## Navigation
-    |-----+--------------------------+------------+-------------------|
-    | key | command                  | key        | command           |
-    |-----+--------------------------+------------+-------------------|
-    | (   | `lispy-out-backward`     | )          | `lispy-out-forward`
-    | a   | `lispy-backward`         | l          | `lispy-forward`   |
-    | j   | `lispy-up`               | k          | `lispy-down`      |
-    | f   | `lispy-flow`             |            |                   |
-    | o   | `lispy-differnt`         | o          | reverses itself   |
-    | gd  | `lispy-follow`           |            |                   |
-    | G   | `lispy-goto`             |            |                   |
-    | q   | `lispy-ace-paren`        |            |                   |
-    | Q   | `lispy-ace-char`         |            |                   |
-    |-----+--------------------------+------------+-------------------|
+1. An edit is made to the buffer in normal mode.
+2. Insert mode is exited.
 
-## Transformations
+The main intended usecase is to modify single symbols. The YAE-Lisper can
+perform a quick operation on a symbol, and get dropped right back into the Lispy
+state on completion.
 
-    |-----+--------------------------+------------+-------------------|
-    | key | command                  | key        | command           |
-    |-----+--------------------------+------------+-------------------|
-    | C-k | `lispy-move-up`          | C-j        | `lispy-move-down` |
-    | >   | `alter-sexp-right`       | <          | `alter-sexp-left` |
-    | c   | `lispy-clone`            | DEL        |                   |
-    | C   | `lispy-convolute`        | C          | Reverses itself   |
-    | r   | `lispy-raise`            | u          | `lispy-undo`      |
-    | R   | `lispy-raise-some`       | u          | `lispy-undo`      |
-    | /   | `lispy-splice`           | u          | `lispy-undo`      |
-    | gJ  | `lispy-split`            | J          | `lispy-join`      |
-    | O   | `lispy-oneline`          | M          | `lispy-multiline` |
-    | ;   | `lispy-comment`          | C-u ;      | `lispy-comment`   |
-    | t   | `lispy-teleport`         |            |                   |
-    |-----+--------------------------+------------+-------------------|
+#### 3. Make insertion vs. structure editing explicit.
 
-    < and > change the bounds of sexps contextually, depeding on which
-    side they point is on.
-
-## Kill related
-
-    |-------+------------------------------------|
-    | key   | command                            |
-    |-------+------------------------------------|
-    | DEL   | `lispy-delete-backward`            |
-    | D     | `lispy-kill`                       |
-    | C     | `lispy-kill` and enter insert      |
-    | S     | `lispy-kill-at-point`              |
-    | p     | `lispy-yank`                       |
-    | y     | `lispy-new-copy`                   |
-    |-------+------------------------------------|
-
-## Marking
-
-    |-------+------------------------------------|
-    | key   | command                            |
-    |-------+------------------------------------|
-    | v     | `lispy-mark-symbol`                |
-    | V     | `lispy-mark-list`                  |
-    | s     | `lispy-ace-symbol`                 |
-    | gs    | `lispy-ace-symbol-replace`         |
-    |-------+------------------------------------|
-
-## Misc
-
-    |-------+------------------------------------|
-    | key   | command                            |
-    |-------+------------------------------------|
-    | C-1   | `lispy-describe-inline             |
-    | C-2   | `lispy-arglist-inline              |
-    | u     | `lispy-undo`                       |
-    | e     | `lispy-eval`                       |
-    | E     | `lispy-eval-and-insert`            |
-    | K     | `lispy-describe`                   |
-    | A     | `lispy-arglist`                    |
-    | gq    | `lispy-normalize`                  |
-    | z     | `lispy-view`                       |
-    | =     | `lispy-tab`                        |
-    | TAB   | `lispy-shifttab`                   |
-    |-------+------------------------------------|
-
+YAE-Lispy uses the Vimmer's familiar Insert state instead of implicitly
+dispatching based on point location, as vanilla Lispy and evil-lispy does. One
+large benefit to this is that the <kbd>SPC</kbd> key is now freed to operate as
+a leader key. _(\*cough\* doom/spacemacs \*cough\*)_
