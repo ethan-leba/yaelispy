@@ -29,7 +29,7 @@
 (require 'evil)
 (require 'lispy)
 
-;; ——— Mode/State definition ——————————————————————————————————————————————————
+;;* Mode/State definition
 
 (defvar-local evil-lispy-transient-normal-state nil)
 ;;;###autoload
@@ -57,25 +57,27 @@
       (remove-hook 'activate-mark-hook 'evil-visual-activate-hook t)
     (add-hook 'activate-mark-hook 'evil-visual-activate-hook nil t)))
 
-;; FIXME: y u no work??
-(defun evil-lispy-exit-transient-normal-on-change (beg end len)
-  "Move bound of sexp right"
+;;* Utilities
+
+(defvar evil-lispy-normal-exit-commands
+  '(lispyville-delete
+    lispyville-delete-line
+    lispyville-delete-char-or-splice
+    evil-replace)
+  "The list of Normal state commands that should trigger re-entry into Lispy state.")
+
+(defun evil-lispy-execute-in-normal-state ()
+  "Execute the next command in Normal state."
   (interactive)
-  (when (and (evil-normal-state-p)
-             evil-lispy-transient-normal-state
-             ;; (not (equal beg end))
-             (> len 0))
-    (evil-lispy-state)
-    (lispy-backward 1)
-    (setq evil-lispy-transient-normal-state nil)))
-
-(defun evil-lispy--mode-activate ()
-  (if (member #'evil-lispy-exit-transient-normal-on-change after-change-functions)
-      (remove #'evil-lispy-exit-transient-normal-on-change after-change-functions)
-    (appendq! after-change-functions `(,#'evil-lispy-exit-transient-normal-on-change))))
-
-(add-hook 'evil-lispy-mode-hook #'evil-lispy--mode-activate)
-;; ——— Utilities ————————————————————————————————————————————————————————---—--
+  (evil-delay `(memq this-command `,evil-lispy-normal-exit-commands)
+      `(progn
+         (with-current-buffer ,(current-buffer)
+           (message "Resetting state to %S" ',evil-state)
+           (evil-lispy-state)
+           (lispy-backward 1)))
+    'post-command-hook)
+  (evil-normal-state)
+  (evil-echo "Switched to Normal state for the next command ..."))
 
 (defmacro evil-lispy--bind (&rest code)
   "Helper to make an bindable command"
@@ -83,13 +85,51 @@
      (interactive)
      ,@code))
 
-(defmacro evil-lispy--insert-after (fun)
+(defun evil-lispy--insert-after (fun)
   "Helper to make an bindable command"
-  `(lambda () (interactive) ,fun (evil-insert-state)))
+  `(lambda ()
+     ,(format "Call `%s', and then enter insert mode.\n\n%s"
+              (symbol-name fun) (documentation fun))
+     (interactive) (call-interactively #',fun) (evil-insert-state)))
 
-(defmacro evil-lispy--jump-back (fun)
+(defun evil-lispy--jump-back (fun)
   "Helper to make an bindable command"
-  `(lambda () (interactive) ,fun (lispy-backward 1)))
+  `(lambda ()
+     ,(format "Call `%s', and then jump to the left-most paren.\n\n%s"
+              (symbol-name fun) (documentation fun))
+     (interactive) (call-interactively #',fun) (lispy-backward 1)))
+
+(defun evil-lispy--insert-nonspecial (fun)
+  "Helper to make an bindable command"
+  `(lambda ()
+     ,(format "Call `%s', and then jump to the left-most paren.\n\n%s"
+              (symbol-name fun) (documentation fun))
+     (interactive)
+     (call-interactively #',fun)
+     (unless (or (region-active-p)
+                 (lispy-left-p)
+                  (lispy-right-p)
+                  (and (lispy-bolp)
+                       (or (looking-at lispy-outline-header)
+                           (looking-at lispy-outline))))
+       (evil-insert-state))))
+
+(defvar evil-lispy--command-wrappers
+  '((:insert . evil-lispy--insert-after)
+   (:jump . evil-lispy--jump-back)
+   (:hybrid . evil-lispy--insert-nonspecial)))
+
+
+(defun evil-lispy-define-key (keymap key def type)
+  "Forward to (`define-key' KEYMAP KEY FUNC).
+FUNC is obtained from (`lispy--insert-or-call' DEF PLIST)."
+  (declare (indent 3))
+  (require 'eldoc)
+  (let* ((lamb (alist-get type evil-lispy--command-wrappers))
+         (func (defalias (intern (concat "yae-" (symbol-name def) "-and-" (substring (symbol-name type) 1)))
+                 (funcall lamb def))))
+    (eldoc-add-command func)
+    (define-key keymap (kbd key) func)))
 
 (defun evil-lispy-alter-sexp-left ()
   "Move bound of sexp left"
@@ -109,6 +149,7 @@
   "Move bound of sexp right"
   (interactive)
   (setq evil-lispy-transient-normal-state t)
+  (deactivate-mark)
   (evil-normal-state))
 
 (defun evil-lispy-insert ()
@@ -127,7 +168,7 @@
   (evil-append 0)
   (deactivate-mark))
 
-;; ——— Evil standard keymap overrides —————————————————————————————————————————
+;;* Evil standard keymap overrides
 
 (let ((map evil-lispy-mode-map))
   ;; Entering lispy state
@@ -147,7 +188,7 @@
      (lispy-backward 1))))
 
 
-;; ——— Lispy state binds ——————————————————————————————————————————————————————
+;;* Lispy state binds
 
 (let ((map evil-lispy-state-map))
   ;; Exiting state
@@ -159,90 +200,73 @@
   (define-key map [escape] (kbd "C-g"))
 
   (define-key map "i" #'evil-lispy-insert)
-
   (define-key map "a" #'evil-lispy-append)
-  (define-key map "A" 'lispy-beginning-of-defun)
-  ;; (define-key map (kbd "SPC") (evil-lispy--bind
-  ;;                              (lispy-space) (evil-insert-state)))
-  (define-key map (kbd "RET") (evil-lispy--bind
-                               (lispy-newline-and-indent) (evil-insert-state)))
+  (define-key map "A" #'lispy-beginning-of-defun)
+  (evil-lispy-define-key map "RET" #'lispy-newline-and-indent :hybrid)
 
   ;; Navigation
-  (define-key map (kbd "(") (evil-lispy--insert-after (lispy-parens 0)))
-  (define-key map (kbd ")") 'lispy-out-forward)
-  (define-key map (kbd "C-o") 'evil-jump-backward) ; need to go to normal mode if out of special
-  (define-key map (kbd "C-i") 'evil-jump-forward) ; need to go to normal mode if out of special
-  (define-key map (kbd "C-e") 'lispy-move-end-of-line)
-
-  (define-key map "h" 'lispy-backward)
-  (define-key map "j" 'lispy-down)
-  (define-key map "k" 'lispy-up)
-  (define-key map "l" 'lispy-forward)
-  (define-key map "f" 'lispy-flow)
-  (define-key map "o" 'lispy-different)
-  (define-key map "gd" 'lispy-follow)
-  (define-key map "G" 'lispy-goto)
-  (define-key map "q" 'lispy-ace-paren)
-  (define-key map "Q" 'lispy-ace-char)
+  ;; (define-key map (kbd "(") (evil-lispy--insert-after (lispy-parens 0)))
+  (define-key map (kbd ")") #'lispy-out-forward)
+  (define-key map "h" #'lispy-backward)
+  (define-key map "j" #'lispy-down)
+  (define-key map "k" #'lispy-up)
+  (define-key map "l" #'lispy-forward)
+  (define-key map "f" #'lispy-flow)
+  (define-key map "o" #'lispy-different)
+  (define-key map "gd" #'lispy-follow)
+  (define-key map "G" #'lispy-goto)
+  (define-key map "q" #'lispy-ace-paren)
+  (define-key map "Q" #'lispy-ace-char)
 
   ;; Paredit transformations
-  (define-key map ">" 'evil-lispy-alter-sexp-right)
-  (define-key map "<" 'evil-lispy-alter-sexp-left)
-  (define-key map "/" 'lispy-splice)
-  (lispy-define-key map "r" 'lispy-raise t)
-  (define-key map "R" 'lispy-raise-some)
-  (define-key map (kbd "gJ") 'lispy-split)
-  (define-key map "J" 'lispy-join)
-  (lispy-define-key map "C" 'lispy-convolute t)
-  (lispy-define-key map "C-k" 'lispy-move-up t)
-  (lispy-define-key map "C-j" 'lispy-move-down t)
-  (lispy-define-key map "O" 'lispy-oneline t)
-  (lispy-define-key map "M" 'lispy-multiline t)
-  (define-key map (kbd ";") 'lispy-comment)
-  (define-key map "c" 'lispy-clone)
-  (define-key map "t" 'lispy-teleport)
+  (define-key map ">" #'evil-lispy-alter-sexp-right)
+  (define-key map "<" #'evil-lispy-alter-sexp-left)
+  (define-key map "/" #'lispy-splice)
+  (define-key map "r" #'lispy-raise)
+  (define-key map "R" #'lispy-raise-some)
+  (define-key map (kbd "gJ") #'lispy-split)
+  (define-key map "J" #'lispy-join)
+  (define-key map "C" #'lispy-convolute)
+  (define-key map (kbd "C-k") #'lispy-move-up)
+  (define-key map (kbd "C-j") #'lispy-move-down)
+  (define-key map "O" #'lispy-oneline)
+  (define-key map "M" #'lispy-multiline)
+  (define-key map (kbd ";") #'lispy-comment)
+  (define-key map "C" #'lispy-clone)
+  (define-key map "t" #'lispy-teleport)
 
   ;; Kill related
   ;; (define-key map (kbd "DEL")
   ;;   (evil-lispy--jump-back (lispy-delete-backward 0)))
-  (define-key map "d" (evil-lispy--jump-back (lispy-kill-at-point)))
-  (define-key map "S" (evil-lispy--bind
-                       (lispy-kill-at-point) (evil-insert 0)))
-  (define-key map "p" 'lispy-yank)
-  (define-key map "n" #'evil-lispy-transient-normal)
-  (define-key map "y" 'lispy-new-copy)
+  (evil-lispy-define-key map "d" #'lispy-delete :jump)
+  (evil-lispy-define-key map "c" #'lispy-delete :insert)
+  (evil-lispy-define-key map "p" #'lispy-paste :jump)
+  (define-key map "P" #'yank-pop)
+  (define-key map "n" #'evil-lispy-execute-in-normal-state)
+  (define-key map "y" #'lispy-new-copy)
 
 
   ;; Marking
-  (define-key map "s" 'lispy-ace-symbol)
-  (define-key map "gs" 'lispy-ace-symbol-replace)
-  (define-key map "v" 'lispy-mark-symbol)
-  (define-key map "V" 'lispy-mark-list)
+  (define-key map "s" #'lispy-ace-symbol)
+  (define-key map "gs" #'lispy-ace-symbol-replace)
+  (define-key map "v" #'lispy-mark-symbol)
+  (define-key map "V" #'lispy-mark-list)
 
 
   ;; Misc
-  (define-key map (kbd "C-1") 'lispy-describe-inline)
-  (define-key map (kbd "C-2") 'lispy-arglist-inline)
-  (define-key map "u" 'lispy-undo)
-  (define-key map "e" 'lispy-eval)
-  (define-key map "E" 'lispy-eval-and-insert)
-  (define-key map "K" 'lispy-describe)
+  (define-key map "u" #'lispy-undo)
+  (define-key map "e" #'lispy-eval)
+  (define-key map "E" #'lispy-eval-and-insert)
+  (define-key map "K" #'lispy-describe)
 
-  (define-key map "gq" 'lispy-normalize)
-  (define-key map "=" 'lispy-tab)
-  (define-key map (kbd "TAB") 'lispy-shifttab)
-  (lispy-define-key map "z" 'lispy-view t)
+  (define-key map "gq" #'lispy-normalize)
+  (define-key map "=" #'lispy-tab)
+  (define-key map (kbd "TAB") #'lispy-shifttab)
+  (define-key map "z" #'lispy-view)
 
+  ;; Outline
+  (define-key map "gj" #'lispy-outline-next)
+  (define-key map "gk" #'lispy-outline-prev)
   ;; Digit argument
-  (mapc (lambda (x) (lispy-define-key map (format "%d" x) 'digit-argument))
+  (mapc (lambda (x) (define-key map (format "%d" x) #'digit-argument))
         (number-sequence 0 9)))
-
-
-
-(evil-add-command-properties 'lispy-out-forward :jump t)
-(evil-add-command-properties 'lispy-out-backward :jump t)
-(evil-add-command-properties 'lispy-follow :jump t)
-
-
-(provide 'evil-lispy)
-;;; evil-lispy.el ends here
