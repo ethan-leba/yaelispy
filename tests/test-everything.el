@@ -37,4 +37,38 @@
              (evil-lispy-insert)
              (evil-normal-state))
       (expect :to-have-buffer-contents "|(expression one)")
-      (expect :to-be-in-state 'lispy))))
+      (expect :true-in-buffer #'evil-lispy-state-p))))
+
+(describe "insert and append"
+  (it "marking symbols select the beginning not end"
+    (-doto (with-test-buffer "|(expression one)"
+             (lispy-mark-car))
+      (expect :to-have-buffer-contents "(|expression~ one)"))))
+
+(describe "transient normal mode"
+  (it "will go back to lispy state after an edit operation"
+    (-doto (with-test-buffer "|(expression one)"
+             (evil-lispy-enter-transient-normal-state)
+             (ot--keyboard-input
+              (ot--type "x")))
+      (expect :true-in-buffer #'evil-lispy-state-p)))
+  (it "deactivate mark"
+    (-doto (with-test-buffer "|(expression one)"
+             (lispy-mark-car)
+             (evil-lispy-enter-transient-normal-state))
+      (expect :to-have-buffer-contents "(|expression one)")))
+  (it "won't go back to lispy state after an operation not in the list"
+    (-doto (with-test-buffer "|(expression one)"
+             (evil-lispy-enter-transient-normal-state)
+             (ot--keyboard-input
+              (ot--type "l")))
+      (expect :true-in-buffer #'evil-normal-state-p)))
+  (it "won't go back to lispy state after lispy state and then back to normal state"
+    (-doto (with-test-buffer "|(expression one)"
+             (evil-lispy-enter-transient-normal-state)
+             (evil-lispy-state)
+             (ot--keyboard-input
+              ;; Enter normal mode via user command
+              (ot--meta-x-command "evil-normal-state")
+              (ot--type "x")))
+      (expect :true-in-buffer #'evil-normal-state-p))))

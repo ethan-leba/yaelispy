@@ -1,3 +1,27 @@
+<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
+**Table of Contents**
+
+- [1. Vimify Lispy as much as possible.](#1-vimify-lispy-as-much-as-possible)
+- [2. Make Lispy the primary state.](#2-make-lispy-the-primary-state)
+- [3. Make insertion vs. structure editing explicit.](#3-make-insertion-vs-structure-editing-explicit)
+- [4. No knowledge of vanilla Lispy required.](#4-no-knowledge-of-vanilla-lispy-required)
+- [A quick recap on structural editing for the uninitiated](#a-quick-recap-on-structural-editing-for-the-uninitiated)
+- [Keybindings](#keybindings)
+    - [Reversible commands](#reversible-commands)
+    - [Keys that modify whitespace](#keys-that-modify-whitespace)
+    - [Command chaining](#command-chaining)
+    - [Navigating with `avy`-related commands](#navigating-with-avy-related-commands)
+- [Operating on regions](#operating-on-regions)
+    - [Ways to activate region](#ways-to-activate-region)
+    - [Move region around](#move-region-around)
+    - [Switch to the other side of the region](#switch-to-the-other-side-of-the-region)
+    - [Grow/shrink region](#growshrink-region)
+    - [Commands that operate on region](#commands-that-operate-on-region)
+        - [YAE-Lispy specific commands](#yae-lispy-specific-commands)
+            - [`yae-lispy-insert`](#yae-lispy-insert)
+            - [Post command behavior](#post-command-behavior)
+
+<!-- markdown-toc end -->
 
 **YAE-Lispy** is _Yet-Another-Evil_ [Lispy](https://github.com/abo-abo/lispy)
 variant that aims to make Lispy familiar and intuitive to the Vim user while
@@ -89,23 +113,31 @@ defun append   │   │   cond   │             │
 
 We can see that leaves correspond to symbols, while the nodes correspond to lists.
 
+### Terminology
+
+- **Parent**: The node above the current.
+- **Sibling**:
+
 ## Keybindings
 
 First off, here are the keybindings in YAE-Lispy that map very closely to Vim's bindings.
 
-| key                | command                                                                      |
-| ------------------ | -------------------------------------------------------------------          |
-| <kbd>h</kbd>       | [`lispy-backward`](http://abo-abo.github.io/lispy/#lispy-backward)           |
-| <kbd>j</kbd>       | [`lispy-down`](http://abo-abo.github.io/lispy/#lispy-down)                   |
-| <kbd>k</kbd>       | [`lispy-up`](http://abo-abo.github.io/lispy/#lispy-up)                       |
-| <kbd>l</kbd>       | [`lispy-forward`](http://abo-abo.github.io/lispy/#lispy-forward)             |
-| <kbd>d</kbd>       | [`lispy-kill-at-point`](http://abo-abo.github.io/lispy/#lispy-kill-at-point) |
-| <kbd>c</kbd>       | [`yae-lispy-change`](http://abo-abo.github.io/lispy/#yae-lispy-change)       |
-| <kbd>p</kbd>       | [`lispy-paste`](http://abo-abo.github.io/lispy/#lispy-down)                  |
-| <kbd>y</kbd>       | [`lispy-new-copy`](http://abo-abo.github.io/lispy/#lispy-new-copy)           |
-| <kbd>u</kbd>       | [`lispy-undo`](http://abo-abo.github.io/lispy/#lispy-undo)                   |
-| <kbd>i</kbd>       | [`yae-lispy-insert`](#yae-lispy-insert)                                      |
+| key                                                                 | description                                                 | demonstration                                                                     |
+| ------------------                                                  | -                                                           | -----                                                                             |
+| [<kbd>h</kbd>](http://abo-abo.github.io/lispy/#lispy-backward)      | move to the previous list.                                  | ![](file:///Users/ethanleba/Documents/OSS/nyobe-evil-lispy/assets/lispy-flow.svg) |
+| [<kbd>k</kbd>](http://abo-abo.github.io/lispy/#lispy-up)            | move to the previous list inside the current, if it exists. | ![](file:///Users/ethanleba/Documents/OSS/nyobe-evil-lispy/assets/lispy-flow.svg) |
+| [<kbd>j</kbd>](http://abo-abo.github.io/lispy/#lispy-down)          | move to the next list at the current level.                 | ![](file:///Users/ethanleba/Documents/OSS/nyobe-evil-lispy/assets/lispy-down.svg) |
+| [<kbd>f</kbd>](http://abo-abo.github.io/lispy/#lispy-flow)          | move to the next list.                                      | ![](file:///Users/ethanleba/Downloads/fooble.svg)                                 |
+| [<kbd>d</kbd>](http://abo-abo.github.io/lispy/#lispy-kill-at-point) | delete the current list (and then jump to the next list).   |                                                                                   |
+| [<kbd>c</kbd>](http://abo-abo.github.io/lispy/#yae-lispy-change)    | delete the current list (and then enter insert mode).       |                                                                                   |
+| [<kbd>p</kbd>](http://abo-abo.github.io/lispy/#lispy-paste)         | paste before the current list.                              |                                                                                   |
+| [<kbd>y</kbd>](http://abo-abo.github.io/lispy/#lispy-new-copy)      | yank the list at point.                                     |                                                                                   |
+| [<kbd>u</kbd>](http://abo-abo.github.io/lispy/#lispy-undo)          | undo.                                                       |                                                                                   |
+| [<kbd>i</kbd>](#yae-lispy-insert)                                   | enter insert mode.                                          |                                                                                   |
+| [<kbd>a</kbd>](#yae-lispy-append)                                   | enter insert mode.                                          |                                                                                   |
+<!-- | [<kbd>l</kbd>](http://abo-abo.github.io/lispy/#lispy-forward)       |                                                             |                                                       | -->
 
+[^1]: well, not really.
 
 FOO
 

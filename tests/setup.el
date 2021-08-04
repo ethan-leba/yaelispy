@@ -12,6 +12,7 @@
 
     ;; show mark as well (other side of selection, if any)
     (when m
+      (message "oh hi marc")
       (goto-char m)
       (insert "~")))
 
@@ -66,7 +67,7 @@
 (buttercup-define-matcher :true-in-buffer (test-buffer func)
   (setq test-buffer (funcall test-buffer))
   (with-current-buffer test-buffer
-    (funcall func)))
+    (funcall (funcall func))))
 
 ;; these are borrowed from omnisharp-emacs
 ;;
