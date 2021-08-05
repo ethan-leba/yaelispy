@@ -28,9 +28,21 @@
 (require 'evil)
 (require 'lispy)
 
+;;* Variables
+(defvar evil-lispy-normal-exit-commands
+  '(lispyville-delete
+    lispyville-delete-line
+    lispyville-delete-char-or-splice
+    evil-delete-char
+    evil-replace)
+  "The list of Normal state commands that should trigger re-entry into Lispy state.")
+
+(defvar evil-lispy--command-wrappers
+  '((:insert . evil-lispy--insert-after)
+    (:jump . evil-lispy--jump-back)
+    (:hybrid . evil-lispy--insert-nonspecial)))
 ;;* Mode/State definition
 
-(defvar-local evil-lispy-transient-normal-state nil)
 ;;;###autoload
 (define-minor-mode evil-lispy-mode
   "Context sensitive paredit"
@@ -39,10 +51,6 @@
   :init-value nil
   :after-hook (evil-normal-state))
 
-(defun evil-lispy-activate ()
-  (setq evil-lispy-transient-normal-state nil))
-
-(defun evil-lispy-deactivate ())
 
 ;; Evil sexp editing state
 (evil-define-state
@@ -57,37 +65,8 @@
     (add-hook 'activate-mark-hook 'evil-visual-activate-hook nil t)))
 
 ;;* Utilities
-
-(defvar evil-lispy-normal-exit-commands
-  '(lispyville-delete
-    lispyville-delete-line
-    lispyville-delete-char-or-splice
-    evil-delete-char
-    evil-replace)
-  "The list of Normal state commands that should trigger re-entry into Lispy state.")
-
-(defun evil-lispy-enter-transient-normal-state ()
-  "Execute the next command in Normal state."
-  (interactive)
-  (evil-normal-state)
-  (evil-delay `(or (memq this-command `,evil-lispy-normal-exit-commands)
-                   (evil-lispy-state-p))
-      `(unless (evil-lispy-state-p)
-         (with-current-buffer ,(current-buffer)
-           (message "Resetting state to %S" ',evil-state)
-           (when (evil-normal-state-p)
-             ;; TODO: disable inc. search highlighting (hope this doesn't affect anything else!)
-             ;; (evil-force-normal-state)
-             )
-           (evil-lispy-state)
-           (lispy-mark-symbol)))
-    'post-command-hook)
-  (evil-echo "Switched to Normal state for the next command ...")
-  (deactivate-mark t))
-
-
 (defmacro evil-lispy--bind (&rest code)
-  "Helper to make an bindable command"
+  "Helper to make an bindable command. "
   `(lambda ()
      (interactive)
      ,@code))
@@ -115,17 +94,11 @@
      (call-interactively #',fun)
      (unless (or (region-active-p)
                  (lispy-left-p)
-                  (lispy-right-p)
-                  (and (lispy-bolp)
-                       (or (looking-at lispy-outline-header)
-                           (looking-at lispy-outline))))
+                 (lispy-right-p)
+                 (and (lispy-bolp)
+                      (or (looking-at lispy-outline-header)
+                          (looking-at lispy-outline))))
        (evil-insert-state))))
-
-(defvar evil-lispy--command-wrappers
-  '((:insert . evil-lispy--insert-after)
-    (:jump . evil-lispy--jump-back)
-    (:hybrid . evil-lispy--insert-nonspecial)))
-
 
 (defun evil-lispy-define-key (keymap key def type)
   "Forward to (`define-key' KEYMAP KEY FUNC).
@@ -137,6 +110,40 @@ FUNC is obtained from (`lispy--insert-or-call' DEF PLIST)."
                  (funcall lamb def))))
     (eldoc-add-command func)
     (define-key keymap (kbd key) func)))
+
+;;* Evil-Lispy commands
+(defun evil-lispy-enter-transient-normal-state ()
+  "Execute the next command in Normal state."
+  (interactive)
+  (let ((marker (point-marker)))
+    (evil-normal-state)
+    (evil-delay `(or (memq this-command `,evil-lispy-normal-exit-commands)
+                     (evil-lispy-state-p))
+        `(unless (evil-lispy-state-p)
+           (with-current-buffer ,(current-buffer)
+             (when (evil-normal-state-p)
+               ;; TODO: disable inc. search highlighting (hope this doesn't affect anything else!)
+               ;; (evil-force-normal-state)
+               )
+             (evil-lispy-state)
+             (goto-char (marker-position ,marker))))
+      'post-command-hook)
+    (deactivate-mark t)))
+
+(defun evil-lispy-enter-transient-insert-state ()
+  "Execute the next command in Normal state."
+  (interactive)
+  (evil-insert-state)
+  (evil-delay `(or (not (evil-insert-state-p))
+                   (evil-lispy-state-p))
+      `(with-current-buffer ,(current-buffer)
+         (unless (evil-lispy-state-p)
+           (evil-lispy-state)
+           (lispy-mark-symbol))
+         ;; FIXME: This marking behavior is not sane.
+         )
+    'post-command-hook)
+  (deactivate-mark t))
 
 (defun evil-lispy-alter-sexp-right ()
   "Move bound of sexp right"
@@ -152,51 +159,41 @@ FUNC is obtained from (`lispy--insert-or-call' DEF PLIST)."
       (lispy-slurp 1)
     (lispy-barf 1)))
 
-(defun evil-lispy-transient-normal ()
-  "Move bound of sexp right"
-  (interactive)
-  (setq evil-lispy-transient-normal-state t)
-  (deactivate-mark)
-  (evil-normal-state))
-
-(defun inner-bounds (bound)
-  (cons (+ 1 (car bound)) (- (cdr bound) 1)))
-
-(defun leba-lispy-bounds ()
+(defun evil-lispy-bounds ()
   (interactive)
   (if (not mark-active)
-      (inner-bounds (bounds-of-thing-at-point 'sexp))
-    ;; TODO: handle string case
-    (let ( (result (car (region-bounds))))
-      (progn
-	(setq mark-active nil)
-	result))))
+      ;; TODO: Do this with just lispy commands?
+      (save-excursion
+        (when (lispy-right-p)
+          (lispy-different))
+        (cons (1+ (point))
+              (progn (lispy-different)
+                     (1- (point)))))
+    (car (region-bounds))))
 
-(defun leba-lispy-insert ()
+(defun evil-lispy-open-below ()
   (interactive)
-  (goto-char (car (leba-lispy-bounds)))
-  (evil-insert-state))
+  (lispy-newline-and-indent)
+  (previous-line)
+  (evil-lispy-enter-transient-insert-state))
 
-(defun leba-lispy-append ()
+(defun evil-lispy-open-above ()
   (interactive)
-  (goto-char (cdr (leba-lispy-bounds)))
-  (evil-insert-state))
+  (lispy-different)
+  (lispy-newline-and-indent)
+  (evil-lispy-enter-transient-insert-state))
 
 (defun evil-lispy-insert ()
   "Move bound of sexp left"
   (interactive)
-  (when (lispy-right-p)
-    (backward-char))
-  (evil-insert 0)
-  (deactivate-mark))
+  (goto-char (car (evil-lispy-bounds)))
+  (evil-lispy-enter-transient-insert-state))
 
 (defun evil-lispy-append ()
   "Move bound of sexp left"
   (interactive)
-  (when (lispy-right-p)
-    (backward-char))
-  (evil-append 0)
-  (deactivate-mark))
+  (goto-char (cdr (evil-lispy-bounds)))
+  (evil-lispy-enter-transient-insert-state))
 
 (defun evil-lispy-repeat ()
   "Repeat last command with last prefix arg."
@@ -223,10 +220,6 @@ FUNC is obtained from (`lispy--insert-or-call' DEF PLIST)."
      (evil-lispy-state)
      (evil-backward-char 1 nil t)
      (lispy-forward 1)))
-  (evil-define-key 'insert evil-lispy-mode-map [escape]
-    (evil-lispy--bind
-     (evil-lispy-state)
-     (lispy-backward 1)))
   (evil-define-key 'insert map (kbd "SPC") #'lispy-space))
 
 
@@ -243,8 +236,8 @@ FUNC is obtained from (`lispy--insert-or-call' DEF PLIST)."
   (define-key map "i" #'evil-lispy-insert)
   (define-key map "A" #'lispy-beginning-of-defun)
   (evil-lispy-define-key map "RET" #'lispy-newline-and-indent :hybrid)
-  (define-key map "o" #'evil-open-below)
-  (define-key map "O" #'evil-open-above)
+  (define-key map "o" #'evil-lispy-open-above)
+  (define-key map "O" #'evil-lispy-open-below)
 
   ;; Navigation
   (evil-lispy-define-key map "(" #'lispy-parens :hybrid)
@@ -259,7 +252,8 @@ FUNC is obtained from (`lispy--insert-or-call' DEF PLIST)."
   (define-key map "gd" #'lispy-follow)
   (define-key map "G" #'lispy-goto)
   (define-key map "q" #'lispy-ace-paren)
-  (define-key map "Q" #'lispy-ace-char)
+  (define-key map "Q" (lambda () (interactive) (lispy-ace-paren 2)))
+  ;; FIXME: real func
 
   ;; Paredit transformations
   (define-key map ">" #'evil-lispy-alter-sexp-right)

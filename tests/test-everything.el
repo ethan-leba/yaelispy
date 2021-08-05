@@ -29,21 +29,34 @@
   (it "acts normally when not using evil-lispy-insert"
     (-doto (with-test-buffer "(expression| one)"
              (evil-insert-state)
-             (evil-normal-state))
-      (expect :to-have-buffer-contents "(expressio|n one)")
+             (ot--keyboard-input (ot--type (kbd "ESC"))))
       (expect :true-in-buffer #'evil-normal-state-p)))
   (it "returns to lispy-state after evil-lispy-insert"
-    (-doto (with-test-buffer "(expression| one)"
+    (-doto (with-test-buffer "|(expression one)"
              (evil-lispy-insert)
-             (evil-normal-state))
-      (expect :to-have-buffer-contents "|(expression one)")
+             (ot--keyboard-input (ot--type (kbd "ESC"))))
       (expect :true-in-buffer #'evil-lispy-state-p))))
 
 (describe "insert and append"
-  (it "marking symbols select the beginning not end"
+  (it "selects beginning/end of list"
     (-doto (with-test-buffer "|(expression one)"
-             (lispy-mark-car))
-      (expect :to-have-buffer-contents "(|expression~ one)"))))
+             (evil-lispy-insert))
+      (expect :to-have-buffer-contents "(|expression one)"))
+    (-doto (with-test-buffer "`|(expression one)"
+             (evil-lispy-insert))
+      (expect :to-have-buffer-contents "`(|expression one)"))
+    (-doto (with-test-buffer "|(expression one)"
+             (evil-lispy-append))
+      (expect :to-have-buffer-contents "(expression one|)")))
+  (it "selects beginning/end of region when active"
+    (-doto (with-test-buffer "|(expression one)"
+             (lispy-mark-car)
+             (evil-lispy-insert))
+      (expect :to-have-buffer-contents "(|expression one)"))
+    (-doto (with-test-buffer "|(expression one)"
+             (lispy-mark-car)
+             (evil-lispy-append))
+      (expect :to-have-buffer-contents "(expression| one)"))))
 
 (describe "transient normal mode"
   (it "will go back to lispy state after an edit operation"
@@ -52,11 +65,11 @@
              (ot--keyboard-input
               (ot--type "x")))
       (expect :true-in-buffer #'evil-lispy-state-p)))
-  (it "deactivate mark"
+  (it "deactivates mark"
     (-doto (with-test-buffer "|(expression one)"
              (lispy-mark-car)
              (evil-lispy-enter-transient-normal-state))
-      (expect :to-have-buffer-contents "(|expression one)")))
+      (expect :to-have-buffer-contents "(expression| one)")))
   (it "won't go back to lispy state after an operation not in the list"
     (-doto (with-test-buffer "|(expression one)"
              (evil-lispy-enter-transient-normal-state)
