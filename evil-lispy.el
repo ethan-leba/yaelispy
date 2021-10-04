@@ -76,14 +76,14 @@
   `(lambda ()
      ,(format "Call `%s', and then enter insert mode.\n\n%s"
               (symbol-name fun) (documentation fun))
-     (interactive) (call-interactively #',fun) (evil-insert-state)))
+     (interactive) (call-interactively #',fun) (evil-lispy-enter-transient-insert-state)))
 
 (defun evil-lispy--jump-back (fun)
   "Helper to make an bindable command"
   `(lambda ()
      ,(format "Call `%s', and then jump to the left-most paren.\n\n%s"
               (symbol-name fun) (documentation fun))
-     (interactive) (call-interactively #',fun) (lispy-down 1)))
+     (interactive) (call-interactively #',fun) (lispy-backward 1)))
 
 (defun evil-lispy--insert-nonspecial (fun)
   "Helper to make an bindable command"
@@ -116,6 +116,7 @@ FUNC is obtained from (`lispy--insert-or-call' DEF PLIST)."
   "Execute the next command in Normal state."
   (interactive)
   (let ((marker (point-marker)))
+    (lispy--remember)
     (evil-normal-state)
     (evil-delay `(or (memq this-command `,evil-lispy-normal-exit-commands)
                      (evil-lispy-state-p))
@@ -126,20 +127,20 @@ FUNC is obtained from (`lispy--insert-or-call' DEF PLIST)."
                ;; (evil-force-normal-state)
                )
              (evil-lispy-state)
-             (goto-char (marker-position ,marker))))
-      'post-command-hook)
+))      'post-command-hook)
     (deactivate-mark t)))
 
 (defun evil-lispy-enter-transient-insert-state ()
   "Execute the next command in Normal state."
   (interactive)
+  (lispy--remember)
   (evil-insert-state)
   (evil-delay `(or (not (evil-insert-state-p))
                    (evil-lispy-state-p))
       `(with-current-buffer ,(current-buffer)
          (unless (evil-lispy-state-p)
            (evil-lispy-state)
-           (lispy-mark-symbol))
+           )
          ;; FIXME: This marking behavior is not sane.
          )
     'post-command-hook)
@@ -194,6 +195,11 @@ FUNC is obtained from (`lispy--insert-or-call' DEF PLIST)."
   (interactive)
   (goto-char (cdr (evil-lispy-bounds)))
   (evil-lispy-enter-transient-insert-state))
+
+(defun evil-lispy-mark-nth (arg)
+  "Move bound of sexp left"
+  (interactive "p")
+  (call-interactively (if (> arg 1) #'lispy-mark-list #'lispy-mark-car)))
 
 (defun evil-lispy-repeat ()
   "Repeat last command with last prefix arg."
@@ -250,8 +256,10 @@ FUNC is obtained from (`lispy--insert-or-call' DEF PLIST)."
   (define-key map "%" #'lispy-different)
   (define-key map "a" #'evil-lispy-append)
   (define-key map "gd" #'lispy-follow)
-  (define-key map "G" #'lispy-goto)
+  ;; (define-key map "G" #'lispy-goto)
+  (define-key map "G" #'counsel-imenu)
   (define-key map "q" #'lispy-ace-paren)
+  (define-key map "b" #'lispy-back)
   (define-key map "Q" (lambda () (interactive) (lispy-ace-paren 2)))
   ;; FIXME: real func
 
@@ -286,8 +294,9 @@ FUNC is obtained from (`lispy--insert-or-call' DEF PLIST)."
   ;; Marking
   (define-key map "s" #'lispy-ace-symbol)
   (evil-lispy-define-key map "gs" #'lispy-ace-symbol-replace :insert)
-  (define-key map "v" #'lispy-mark-symbol)
+  (define-key map "v" #'evil-lispy-mark-nth)
   (define-key map "V" #'lispy-mark-list)
+  (define-key map "-" #'lispy-ace-subword)
 
 
   ;; Misc
@@ -297,11 +306,13 @@ FUNC is obtained from (`lispy--insert-or-call' DEF PLIST)."
   (define-key map "K" #'lispy-describe)
   (define-key map "F" #'lispy-follow)
   (define-key map "." #'evil-lispy-repeat)
+  (define-key map "," #'self-insert-command)
+  (define-key map "x" #'lispy-x)
   ;; (define-key map "" #'lispy-describe)
 
   (define-key map "gq" #'lispy-normalize)
-  (define-key map "=" #'lispy-tab)
-  (define-key map (kbd "TAB") #'lispy-shifttab)
+  (define-key map (kbd "TAB") #'lispy-tab)
+  (define-key map (kbd "<backtab>") #'lispy-shifttab)
   (define-key map "zz" #'evil-scroll-line-to-center)
 
   ;; Outline
